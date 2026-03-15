@@ -33,9 +33,6 @@ importers:
       '@cloudflare/vite-plugin':
         specifier: ^1.28.0
         version: 1.28.0(vite@8.0.0(@types/node@20.19.37)(esbuild@0.27.3)(jiti@2.6.1))(workerd@1.20260312.1)(wrangler@4.73.0(@cloudflare/workers-types@4.20260313.1))
-      '@cloudflare/workers-types':
-        specifier: ^4.20260313.1
-        version: 4.20260313.1
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.2.1
@@ -3199,7 +3196,8 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260312.1':
     optional: true
 
-  '@cloudflare/workers-types@4.20260313.1': {}
+  '@cloudflare/workers-types@4.20260313.1':
+    optional: true
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:

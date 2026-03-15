@@ -1,28 +1,35 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "march-calmness",
-  "compatibility_date": "2026-03-15",
-  "compatibility_flags": ["nodejs_compat"],
-  "main": "./worker/index.ts",
-  "assets": {
-    "not_found_handling": "none"
-  },
-
-  // D1 SQLite database
-  // Run: pnpm exec wrangler d1 create march-calmness
-  // Then paste the database_id from the output below.
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "march-calmness",
-      "database_id": "REPLACE_WITH_DATABASE_ID"
-    }
-  ],
-
-  // Cron Triggers for ESPN polling
-  // - Every 2 minutes during tournament hours
-  // - Hourly outside the tournament window (pollOnce skips if not in window)
-  "triggers": {
-    "crons": ["*/2 * * * *"]
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "march-calmness",
+	"compatibility_date": "2026-03-15",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "./worker/index.ts",
+	"assets": {
+		"not_found_handling": "none"
+	},
+	// D1 SQLite database
+	// Run: pnpm exec wrangler d1 create march-calmness
+	// Then paste the database_id from the output below.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "march-calmness",
+			"database_id": "REPLACE_WITH_DATABASE_ID"
+		},
+		{
+			"binding": "march_calmness",
+			"database_name": "march-calmness",
+			"database_id": "5974aea4-3140-491e-960a-801d9563a878"
+		}
+	],
+	// Cron Triggers for ESPN polling
+	// - Every 2 minutes during tournament hours
+	// - Hourly outside the tournament window (pollOnce skips if not in window)
+	"triggers": {
+		"crons": [
+			"*/2 * * * *"
+		]
+	}
 }
