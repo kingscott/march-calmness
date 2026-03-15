@@ -14,11 +14,7 @@ export const metadata: Metadata = {
   description: "A quiet bracket tracker for March Madness",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: React.PropsWithChildren) {
   return (
     <html lang="en" className={inter.variable}>
       <body className="bg-[var(--bg)] text-[var(--text-primary)] antialiased">

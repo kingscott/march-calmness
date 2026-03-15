@@ -10,11 +10,7 @@ export default function BracketPage() {
 
       <div className="card text-center py-12">
         <p className="text-[var(--text-secondary)]">
-          No bracket loaded.{" "}
-          <a href="/upload" className="text-[var(--accent)] hover:underline">
-            Upload one
-          </a>{" "}
-          to get started.
+          No bracket loaded. <a href="/upload" className="text-[var(--accent)] hover:underline">Upload one</a> to get started.
         </p>
       </div>
     </div>

@@ -10,11 +10,7 @@ export default function DashboardPage() {
 
       <div className="card text-center py-12">
         <p className="text-[var(--text-secondary)]">
-          No brackets yet.{" "}
-          <a href="/upload" className="text-[var(--accent)] hover:underline">
-            Upload a PDF
-          </a>{" "}
-          to get started.
+          No brackets yet. <a href="/upload" className="text-[var(--accent)] hover:underline">Upload a PDF</a> to get started.
         </p>
       </div>
     </div>
