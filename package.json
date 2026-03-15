@@ -19,6 +19,7 @@
     "pdf-to-img": "^4.2.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-hook-form": "^7.71.2",
     "swr": "^2.3.3"
   },
   "pnpm": {

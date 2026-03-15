@@ -1,3 +1,5 @@
+import UploadForm from "@/components/UploadForm";
+
 export default function UploadPage() {
   return (
     <div>
@@ -8,12 +10,7 @@ export default function UploadPage() {
         Upload a filled-in bracket PDF and Claude will extract your picks.
       </p>
 
-      <div
-        className="card max-w-[560px] text-center py-12"
-        style={{ border: "2px dashed var(--border)", background: "transparent" }}
-      >
-        <p className="text-[var(--text-secondary)]">Upload form coming soon.</p>
-      </div>
+      <UploadForm />
     </div>
   );
 }
