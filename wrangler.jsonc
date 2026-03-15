@@ -9,19 +9,12 @@
 	"assets": {
 		"not_found_handling": "none"
 	},
-	// D1 SQLite database
-	// Run: pnpm exec wrangler d1 create march-calmness
-	// Then paste the database_id from the output below.
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "march-calmness",
-			"database_id": "REPLACE_WITH_DATABASE_ID"
-		},
-		{
-			"binding": "march_calmness",
-			"database_name": "march-calmness",
-			"database_id": "5974aea4-3140-491e-960a-801d9563a878"
+			"database_id": "5974aea4-3140-491e-960a-801d9563a878",
+			"migrations_dir": "./migrations"
 		}
 	],
 	// Cron Triggers for ESPN polling
