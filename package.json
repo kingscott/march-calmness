@@ -21,6 +21,10 @@
     "react-dom": "19.2.3",
     "swr": "^2.3.3"
   },
+  "pnpm": {
+    "ignoredBuiltDependencies": ["canvas", "sharp", "unrs-resolver"],
+    "onlyBuiltDependencies": ["better-sqlite3"]
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.12",
