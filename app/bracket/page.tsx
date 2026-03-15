@@ -1,23 +1,20 @@
 export default function BracketPage() {
   return (
     <div>
-      <h1
-        style={{
-          fontSize: "1.75rem",
-          fontWeight: 600,
-          color: "var(--text-primary)",
-          marginBottom: "0.5rem",
-        }}
-      >
+      <h1 className="text-[1.75rem] font-semibold text-[var(--text-primary)] mb-2">
         Bracket
       </h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: "2rem" }}>
+      <p className="text-[var(--text-secondary)] mb-8">
         Live bracket visualization coming soon.
       </p>
 
-      <div className="card" style={{ textAlign: "center", padding: "3rem" }}>
-        <p style={{ color: "var(--text-secondary)" }}>
-          No bracket loaded. <a href="/upload" style={{ color: "var(--accent)" }}>Upload one</a> to get started.
+      <div className="card text-center py-12">
+        <p className="text-[var(--text-secondary)]">
+          No bracket loaded.{" "}
+          <a href="/upload" className="text-[var(--accent)] hover:underline">
+            Upload one
+          </a>{" "}
+          to get started.
         </p>
       </div>
     </div>

@@ -21,67 +21,36 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body>
-        <header
-          style={{
-            borderBottom: "1px solid var(--border)",
-            backgroundColor: "var(--surface)",
-          }}
-        >
-          <nav
-            style={{
-              maxWidth: "1200px",
-              margin: "0 auto",
-              padding: "1rem 1.5rem",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
+      <body className="bg-[var(--bg)] text-[var(--text-primary)] antialiased">
+        <header className="border-b border-[var(--border)] bg-[var(--surface)]">
+          <nav className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-4">
             <Link
               href="/"
-              style={{
-                color: "var(--text-primary)",
-                textDecoration: "none",
-                fontWeight: 600,
-                fontSize: "1.05rem",
-                letterSpacing: "-0.01em",
-              }}
+              className="text-[var(--text-primary)] no-underline font-semibold text-[1.05rem] tracking-tight"
             >
               March Calmness
             </Link>
-            <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
+            <div className="flex items-center gap-6">
               <Link
                 href="/"
-                style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: "0.875rem" }}
+                className="text-[var(--text-secondary)] no-underline text-sm hover:text-[var(--text-primary)] transition-colors duration-200"
               >
                 Dashboard
               </Link>
               <Link
                 href="/bracket"
-                style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: "0.875rem" }}
+                className="text-[var(--text-secondary)] no-underline text-sm hover:text-[var(--text-primary)] transition-colors duration-200"
               >
                 Bracket
               </Link>
-              <Link
-                href="/upload"
-                className="btn btn-primary"
-                style={{ fontSize: "0.8rem", padding: "0.4rem 1rem" }}
-              >
+              <Link href="/upload" className="btn btn-primary text-[0.8rem]! py-[0.4rem]! px-4!">
                 Upload PDF
               </Link>
             </div>
           </nav>
         </header>
 
-        <main
-          style={{
-            maxWidth: "1200px",
-            margin: "0 auto",
-            padding: "2rem 1.5rem",
-          }}
-          className="page-enter"
-        >
+        <main className="mx-auto max-w-[1200px] px-6 py-8 page-enter">
           {children}
         </main>
       </body>
