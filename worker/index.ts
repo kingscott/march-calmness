@@ -5,12 +5,13 @@
  * - scheduled: ESPN poll triggered by Cron Trigger
  */
 
+import appHandler from "vinext/server/app-router-entry";
 import { pollOnce } from "../lib/poller";
 
 export default {
-  // HTTP requests are handled by vinext — this re-export lets the worker
-  // delegate to the framework while still exporting a scheduled handler.
-  // vinext merges its own fetch handler at build time.
+  // Delegate all HTTP requests to the vinext App Router handler.
+  fetch: appHandler.fetch,
+
   scheduled: async (_event: ScheduledEvent) => {
     const result = await pollOnce();
     if (result.skipped) {
