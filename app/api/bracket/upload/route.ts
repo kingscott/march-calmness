@@ -3,8 +3,6 @@ import { insertBracket } from "@/lib/db";
 import { parseBracketPdf, BracketParseError } from "@/lib/bracket-parser";
 import type { UploadResponse, ApiError } from "@/lib/types";
 
-export const runtime = "nodejs";
-
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<UploadResponse | ApiError>> {
@@ -29,17 +27,11 @@ export async function POST(
     return NextResponse.json({ error: "File must be a PDF" }, { status: 400 });
   }
 
-  // ── Convert File → Buffer ───────────────────────────────────────────────────
-  const arrayBuffer = await file.arrayBuffer();
-  const pdfBuffer = Buffer.from(arrayBuffer);
-
   // ── Parse bracket via Claude ────────────────────────────────────────────────
   try {
-    const { picks } = await parseBracketPdf(pdfBuffer);
-
-    // ── Persist to SQLite ───────────────────────────────────────────────────────
-    const bracket = insertBracket(name.trim(), picks);
-
+    const pdfArrayBuffer = await file.arrayBuffer();
+    const { picks } = await parseBracketPdf(pdfArrayBuffer);
+    const bracket = await insertBracket(name.trim(), picks);
     return NextResponse.json({ bracket }, { status: 201 });
   } catch (err) {
     if (err instanceof BracketParseError) {

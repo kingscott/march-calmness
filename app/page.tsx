@@ -4,8 +4,8 @@ import type { Bracket } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default function DashboardPage() {
-  const brackets = listBrackets();
+export default async function DashboardPage() {
+  const brackets = await listBrackets();
 
   return (
     <div>

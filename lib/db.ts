@@ -1,29 +1,10 @@
-import { createRequire } from "module";
-import path from "path";
-import type BetterSqlite3 from "better-sqlite3";
+import { env } from "cloudflare:workers";
 import type { Bracket, BracketPicks, Game } from "./types";
 
-// better-sqlite3 uses `bindings` which relies on __filename to locate the
-// native .node binary. In Vite/vinext ESM contexts __filename is undefined,
-// so we load it via a CJS require() scoped to this file's URL instead.
-const _require = createRequire(import.meta.url);
-const SqliteDatabase = _require("better-sqlite3") as typeof BetterSqlite3;
+// ─── Schema migration ─────────────────────────────────────────────────────────
 
-const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), "data.db");
-
-let _db: BetterSqlite3.Database | null = null;
-
-export function getDb(): BetterSqlite3.Database {
-  if (_db) return _db;
-  _db = new SqliteDatabase(DB_PATH);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
-  migrate(_db);
-  return _db;
-}
-
-function migrate(db: BetterSqlite3.Database) {
-  db.exec(`
+export async function migrate(): Promise<void> {
+  await env.DB.exec(`
     CREATE TABLE IF NOT EXISTS brackets (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       name       TEXT    NOT NULL,
@@ -53,27 +34,33 @@ function migrate(db: BetterSqlite3.Database) {
 
 // ─── Bracket queries ──────────────────────────────────────────────────────────
 
-export function insertBracket(name: string, picks: BracketPicks): Bracket {
-  const db = getDb();
-  const stmt = db.prepare(`
-    INSERT INTO brackets (name, picks_json)
-    VALUES (@name, @picks_json)
-    RETURNING *
-  `);
-  const row = stmt.get({ name, picks_json: JSON.stringify(picks) }) as BracketRow;
+export async function insertBracket(name: string, picks: BracketPicks): Promise<Bracket> {
+  const row = await env.DB
+    .prepare(`
+      INSERT INTO brackets (name, picks_json)
+      VALUES (?, ?)
+      RETURNING *
+    `)
+    .bind(name, JSON.stringify(picks))
+    .first<BracketRow>();
+
+  if (!row) throw new Error("INSERT brackets returned no row");
   return rowToBracket(row);
 }
 
-export function getBracket(id: number): Bracket | null {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM brackets WHERE id = ?").get(id) as BracketRow | undefined;
+export async function getBracket(id: number): Promise<Bracket | null> {
+  const row = await env.DB
+    .prepare("SELECT * FROM brackets WHERE id = ?")
+    .bind(id)
+    .first<BracketRow>();
   return row ? rowToBracket(row) : null;
 }
 
-export function listBrackets(): Omit<Bracket, "picks">[] {
-  const db = getDb();
-  const rows = db.prepare("SELECT id, name, created_at, updated_at FROM brackets ORDER BY created_at DESC").all() as BracketRow[];
-  return rows.map((r) => ({
+export async function listBrackets(): Promise<Omit<Bracket, "picks">[]> {
+  const { results } = await env.DB
+    .prepare("SELECT id, name, created_at, updated_at FROM brackets ORDER BY created_at DESC")
+    .all<BracketRow>();
+  return results.map((r) => ({
     id: r.id,
     name: r.name,
     createdAt: r.created_at,
@@ -81,46 +68,53 @@ export function listBrackets(): Omit<Bracket, "picks">[] {
   }));
 }
 
-export function deleteBracket(id: number): boolean {
-  const db = getDb();
-  const result = db.prepare("DELETE FROM brackets WHERE id = ?").run(id);
-  return result.changes > 0;
+export async function deleteBracket(id: number): Promise<boolean> {
+  const result = await env.DB
+    .prepare("DELETE FROM brackets WHERE id = ?")
+    .bind(id)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
 }
 
 // ─── Game queries ─────────────────────────────────────────────────────────────
 
-export function upsertGame(game: Omit<Game, "id">): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO games (espn_id, round, region, team_a, team_b, seed_a, seed_b,
-                       score_a, score_b, status, winner, game_date, updated_at)
-    VALUES (@espnId, @round, @region, @teamA, @teamB, @seedA, @seedB,
-            @scoreA, @scoreB, @status, @winner, @gameDate, datetime('now'))
-    ON CONFLICT (espn_id) DO UPDATE SET
-      score_a    = excluded.score_a,
-      score_b    = excluded.score_b,
-      status     = excluded.status,
-      winner     = excluded.winner,
-      updated_at = excluded.updated_at
-  `).run(game);
+export async function upsertGame(game: Omit<Game, "id">): Promise<void> {
+  await env.DB
+    .prepare(`
+      INSERT INTO games (espn_id, round, region, team_a, team_b, seed_a, seed_b,
+                         score_a, score_b, status, winner, game_date, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT (espn_id) DO UPDATE SET
+        score_a    = excluded.score_a,
+        score_b    = excluded.score_b,
+        status     = excluded.status,
+        winner     = excluded.winner,
+        updated_at = excluded.updated_at
+    `)
+    .bind(
+      game.espnId, game.round, game.region,
+      game.teamA, game.teamB, game.seedA, game.seedB,
+      game.scoreA, game.scoreB, game.status, game.winner, game.gameDate,
+    )
+    .run();
 }
 
-export function listGames(liveOnly = false): Game[] {
-  const db = getDb();
+export async function listGames(liveOnly = false): Promise<Game[]> {
   const sql = liveOnly
     ? "SELECT * FROM games WHERE status = 'in' ORDER BY game_date"
     : "SELECT * FROM games ORDER BY game_date";
-  const rows = db.prepare(sql).all() as GameRow[];
-  return rows.map(rowToGame);
+  const { results } = await env.DB.prepare(sql).all<GameRow>();
+  return results.map(rowToGame);
 }
 
-export function listFinalGames(): Game[] {
-  const db = getDb();
-  const rows = db.prepare("SELECT * FROM games WHERE status = 'post'").all() as GameRow[];
-  return rows.map(rowToGame);
+export async function listFinalGames(): Promise<Game[]> {
+  const { results } = await env.DB
+    .prepare("SELECT * FROM games WHERE status = 'post'")
+    .all<GameRow>();
+  return results.map(rowToGame);
 }
 
-// ─── Row mappers ──────────────────────────────────────────────────────────────
+// ─── Row types ────────────────────────────────────────────────────────────────
 
 interface BracketRow {
   id: number;

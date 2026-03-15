@@ -1,16 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { execFile } from "child_process";
-import fs from "fs/promises";
-import os from "os";
-import path from "path";
-import { promisify } from "util";
 import type { BracketPicks, Region, RegionPicks } from "./types";
-
-const execFileAsync = promisify(execFile);
 
 // ─── Claude extraction prompt ─────────────────────────────────────────────────
 
-const EXTRACTION_PROMPT = `You are analyzing a filled-in NCAA March Madness bracket PDF image.
+const EXTRACTION_PROMPT = `You are analyzing a filled-in NCAA March Madness bracket PDF.
 
 Extract all bracket picks and return them as a single JSON object with this exact shape:
 
@@ -54,8 +47,6 @@ interface RawBracketPicks {
 
 export interface ParseResult {
   picks: BracketPicks;
-  /** Base-64 encoded PNG of the first PDF page (for preview) */
-  previewBase64: string;
 }
 
 export class BracketParseError extends Error {
@@ -69,49 +60,18 @@ export class BracketParseError extends Error {
 }
 
 /**
- * Convert the first page of a bracket PDF to a PNG, send it to the Claude
- * Vision API, and return structured picks + a preview image.
+ * Send a bracket PDF directly to the Claude API as a document source and
+ * return structured picks. No image conversion or system binaries required —
+ * fully compatible with Cloudflare Workers.
  */
 export async function parseBracketPdf(
-  pdfBuffer: Buffer,
+  pdfArrayBuffer: ArrayBuffer,
 ): Promise<ParseResult> {
-  // ── 1. Convert first PDF page to PNG via pdftoppm ────────────────────────
-  let previewBase64: string;
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bracket-"));
-  try {
-    const pdfPath = path.join(tmpDir, "input.pdf");
-    const outPrefix = path.join(tmpDir, "page");
-
-    await fs.writeFile(pdfPath, pdfBuffer);
-
-    // pdftoppm -r 150 -png -f 1 -l 1 input.pdf page
-    // Produces page-1.png (first page only)
-    await execFileAsync("pdftoppm", [
-      "-r", "150",
-      "-png",
-      "-f", "1",
-      "-l", "1",
-      pdfPath,
-      outPrefix,
-    ]);
-
-    // Find the output file (pdftoppm zero-pads: page-01.png or page-1.png)
-    const files = await fs.readdir(tmpDir);
-    const pngFile = files.find((f) => f.startsWith("page") && f.endsWith(".png"));
-    if (!pngFile) {
-      throw new BracketParseError("PDF contains no pages or pdftoppm produced no output");
-    }
-    const pngBuffer = await fs.readFile(path.join(tmpDir, pngFile));
-    previewBase64 = pngBuffer.toString("base64");
-  } catch (err) {
-    if (err instanceof BracketParseError) throw err;
-    throw new BracketParseError("Failed to render PDF to image", err);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
-
-  // ── 2. Send to Claude vision API ─────────────────────────────────────────
   const client = new Anthropic();
+
+  // Convert to base64 using the Web-standard btoa path
+  const pdfBase64 = arrayBufferToBase64(pdfArrayBuffer);
+
   let rawJson: string;
   try {
     const message = await client.messages.create({
@@ -122,11 +82,12 @@ export async function parseBracketPdf(
           role: "user",
           content: [
             {
-              type: "image",
+              // Send the PDF natively — no image conversion needed
+              type: "document",
               source: {
                 type: "base64",
-                media_type: "image/png",
-                data: previewBase64,
+                media_type: "application/pdf",
+                data: pdfBase64,
               },
             },
             {
@@ -148,10 +109,9 @@ export async function parseBracketPdf(
     throw new BracketParseError("Claude API call failed", err);
   }
 
-  // ── 3. Parse Claude's JSON response ──────────────────────────────────────
+  // ── Parse Claude's JSON response ────────────────────────────────────────────
   let raw: RawBracketPicks;
   try {
-    // Strip any accidental markdown fences just in case
     const cleaned = rawJson.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
     raw = JSON.parse(cleaned) as RawBracketPicks;
   } catch (err) {
@@ -161,10 +121,20 @@ export async function parseBracketPdf(
     );
   }
 
-  // ── 4. Validate structure ─────────────────────────────────────────────────
   const picks = validateAndNormalize(raw);
+  return { picks };
+}
 
-  return { picks, previewBase64 };
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Convert an ArrayBuffer to a base64 string using Web APIs (no Node Buffer). */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -191,9 +161,6 @@ function validateAndNormalize(raw: RawBracketPicks): BracketPicks {
     assertStringArray(r.sweet16, `${region}.sweet16`, 2);
     assertString(r.elite8, `${region}.elite8`);
 
-    // Each round's winners must be a subset of the previous round's entrants.
-    // We can only partially validate since we don't have the full bracket seedings,
-    // but we verify round N+1 picks came from round N winners.
     validateProgression(r.round1, r.round2, region, "round1→round2");
     validateProgression(r.round2, r.sweet16, region, "round2→sweet16");
     if (!r.sweet16.includes(r.elite8)) {
@@ -213,7 +180,6 @@ function validateAndNormalize(raw: RawBracketPicks): BracketPicks {
   assertStringArray(raw.final4, "final4", 4);
   assertString(raw.champion, "champion");
 
-  // Each elite8 winner must appear in final4
   const elite8Winners = REGIONS.map((reg) => regions[reg]!.elite8);
   for (const team of raw.final4) {
     if (!elite8Winners.includes(team)) {
@@ -224,9 +190,7 @@ function validateAndNormalize(raw: RawBracketPicks): BracketPicks {
   }
 
   if (!raw.final4.includes(raw.champion)) {
-    throw new BracketParseError(
-      `champion "${raw.champion}" is not in final4`,
-    );
+    throw new BracketParseError(`champion "${raw.champion}" is not in final4`);
   }
 
   return {

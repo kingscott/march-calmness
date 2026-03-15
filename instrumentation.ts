@@ -1,13 +1,9 @@
 /**
- * Next.js instrumentation hook — runs once when the server process starts.
- * https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
+ * Next.js instrumentation hook.
  *
- * The poller uses better-sqlite3 (Node.js native), so it must only start in
- * the "nodejs" runtime, never in the Edge runtime.
+ * ESPN polling now runs as a Cloudflare Cron Trigger (see wrangler.jsonc).
+ * This file is kept as a no-op so Next.js doesn't error on a missing export.
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { startPoller } = await import("./lib/poller");
-    startPoller();
-  }
+  // no-op: polling is handled by the Cloudflare Cron Trigger
 }

@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBracket, deleteBracket } from "@/lib/db";
 import type { Bracket, ApiError } from "@/lib/types";
 
-export const runtime = "nodejs";
-
 type Params = { params: Promise<{ id: string }> };
 
 // ── GET /api/bracket/[id] ─────────────────────────────────────────────────────
@@ -20,7 +18,7 @@ export async function GET(
   }
 
   try {
-    const bracket = getBracket(id);
+    const bracket = await getBracket(id);
     if (!bracket) {
       return NextResponse.json({ error: "Bracket not found" }, { status: 404 });
     }
@@ -45,7 +43,7 @@ export async function DELETE(
   }
 
   try {
-    const deleted = deleteBracket(id);
+    const deleted = await deleteBracket(id);
     if (!deleted) {
       return NextResponse.json({ error: "Bracket not found" }, { status: 404 });
     }
