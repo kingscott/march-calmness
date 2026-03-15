@@ -3,16 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "vinext dev",
     "build": "next build",
+    "dev": "vinext dev",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@opennextjs/cloudflare": "^1.17.1",
     "better-sqlite3": "^11.9.1",
     "bracketry": "^1.1.3",
     "next": "16.1.6",
@@ -22,8 +27,14 @@
     "swr": "^2.3.3"
   },
   "pnpm": {
-    "ignoredBuiltDependencies": ["canvas", "sharp", "unrs-resolver"],
-    "onlyBuiltDependencies": ["better-sqlite3"]
+    "ignoredBuiltDependencies": [
+      "canvas",
+      "sharp",
+      "unrs-resolver"
+    ],
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -38,6 +49,7 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vinext": "^0.0.30",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "wrangler": "^4.73.0"
   }
 }
