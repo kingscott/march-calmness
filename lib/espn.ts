@@ -104,10 +104,11 @@ function parseRegion(headline: string, round: Round): Game["region"] {
   if (round === "championship") return "Championship";
   if (round === "final4") return "Final Four";
   const h = headline.toLowerCase();
+  // Check "midwest" before "west" — "midwest" contains the substring "west"
+  if (h.includes("midwest")) return "Midwest";
   if (h.includes("east")) return "East";
   if (h.includes("west")) return "West";
   if (h.includes("south")) return "South";
-  if (h.includes("midwest")) return "Midwest";
   // If region is ambiguous, fall through — caller can handle null
   return "East"; // safe fallback; scoring engine will use espnId for exact matching
 }
