@@ -1,21 +1,28 @@
-import Database from "better-sqlite3";
+import { createRequire } from "module";
 import path from "path";
+import type BetterSqlite3 from "better-sqlite3";
 import type { Bracket, BracketPicks, Game } from "./types";
+
+// better-sqlite3 uses `bindings` which relies on __filename to locate the
+// native .node binary. In Vite/vinext ESM contexts __filename is undefined,
+// so we load it via a CJS require() scoped to this file's URL instead.
+const _require = createRequire(import.meta.url);
+const SqliteDatabase = _require("better-sqlite3") as typeof BetterSqlite3;
 
 const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), "data.db");
 
-let _db: Database.Database | null = null;
+let _db: BetterSqlite3.Database | null = null;
 
-export function getDb(): Database.Database {
+export function getDb(): BetterSqlite3.Database {
   if (_db) return _db;
-  _db = new Database(DB_PATH);
+  _db = new SqliteDatabase(DB_PATH);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
   migrate(_db);
   return _db;
 }
 
-function migrate(db: Database.Database) {
+function migrate(db: BetterSqlite3.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS brackets (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
