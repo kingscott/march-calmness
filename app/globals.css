@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+/* ─── Design tokens ────────────────────────────────────────────────────────── */
+
+:root {
+  /* Dark mode (default) */
+  --bg:            #1a1a2e;
+  --surface:       #16213e;
+  --surface-hover: #1d2a50;
+  --border:        rgba(255, 255, 255, 0.08);
+  --accent:        #e2c2a2;
+  --accent-dim:    rgba(226, 194, 162, 0.15);
+  --correct:       #7eb89a;
+  --eliminated:    #c47a7a;
+  --pending:       #6b7280;
+  --text-primary:  #e8e6e3;
+  --text-secondary:#9ca3af;
+  --shadow:        0 4px 6px -1px rgb(0 0 0 / 0.3);
+  --shadow-lg:     0 10px 15px -3px rgb(0 0 0 / 0.4);
+
+  --radius-card:   0.75rem;
+  --radius-btn:    0.5rem;
+  --transition:    0.2s ease-in-out;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:            #f8f7f4;
+    --surface:       #ffffff;
+    --surface-hover: #f0eeeb;
+    --border:        rgba(0, 0, 0, 0.08);
+    --accent:        #b07d52;
+    --accent-dim:    rgba(176, 125, 82, 0.1);
+    --correct:       #4a9070;
+    --eliminated:    #a05050;
+    --pending:       #6b7280;
+    --text-primary:  #2d2d2d;
+    --text-secondary:#6b7280;
+    --shadow:        0 4px 6px -1px rgb(0 0 0 / 0.07);
+    --shadow-lg:     0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
+}
+
+@theme inline {
+  --color-bg:             var(--bg);
+  --color-surface:        var(--surface);
+  --color-surface-hover:  var(--surface-hover);
+  --color-accent:         var(--accent);
+  --color-correct:        var(--correct);
+  --color-eliminated:     var(--eliminated);
+  --color-pending:        var(--pending);
+  --color-text-primary:   var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ─── Base ─────────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  html { color-scheme: light; }
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Component utilities ───────────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  transition: box-shadow var(--transition);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: var(--radius-btn);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: background-color var(--transition), opacity var(--transition);
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  color: var(--bg);
+}
+
+.btn-primary:hover {
+  opacity: 0.88;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* ─── Live score breathing animation ──────────────────────────────────────── */
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+.live-pulse {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+/* ─── Page fade-in ─────────────────────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+/* ─── Pick status colors ───────────────────────────────────────────────────── */
+
+.pick-correct    { color: var(--correct); }
+.pick-eliminated { color: var(--eliminated); }
+.pick-pending    { color: var(--pending); }
