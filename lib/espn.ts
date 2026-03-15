@@ -27,6 +27,7 @@ interface EspnEvent {
 interface EspnCompetition {
   id?: string;
   type?: { id?: string; abbreviation?: string };
+  notes?: Array<{ type?: string; headline?: string }>;
   status?: {
     clock?: number;
     displayClock?: string;
@@ -125,8 +126,13 @@ export function parseGame(event: EspnEvent): Omit<Game, "id"> | null {
   const typeAbbr = competition.type?.abbreviation ?? "";
   if (typeAbbr && typeAbbr !== "TRNMNT") return null;
 
-  // Headline lives on the event-level notes array
-  const headline = event.notes?.[0]?.headline ?? event.name ?? "";
+  // Headline: real ESPN responses put notes on competitions[0], not the event.
+  // Fall back to event.notes (older shape) then event.name as last resort.
+  const headline =
+    competition.notes?.[0]?.headline ??
+    event.notes?.[0]?.headline ??
+    event.name ??
+    "";
   const round = parseRound(headline);
   if (!round) return null;
 
