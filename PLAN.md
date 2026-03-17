@@ -166,13 +166,13 @@ Minimal, spacious, and quiet — not the typical loud sports aesthetic.
 
 **PR #3: Bracket visualization component** `components/BracketViewer.tsx`
 
-- [ ] `"use client"` component wrapping Bracketry.js
-- [ ] Single `useEffect` with cleanup for mounting/unmounting the Bracketry instance on a ref div
-- [ ] Bracketry's `.applyMatchesChanges()` for live updates without re-mount
-- [ ] Accepts props: `picks` (user's bracket), `games` (actual results)
-- [ ] Color-codes picks: sage green (correct), muted rose (eliminated), quiet gray (pending)
-- [ ] Breathing animation on live game scores
-- [ ] Can be developed and tested with hardcoded mock data (no API dependency)
+- [x] `"use client"` component wrapping Bracketry.js
+- [x] Single `useEffect` with cleanup for mounting/unmounting the Bracketry instance on a ref div
+- [x] Bracketry's `.applyMatchesUpdates()` for live updates without re-mount
+- [x] Accepts props: `picks` (user's bracket), `games` (actual results)
+- [x] Color-codes picks: sage green (correct), muted rose (eliminated), quiet gray (pending)
+- [x] Breathing animation on live game scores (via `getMatchTopHTML` Live indicator)
+- [x] Can be developed and tested with hardcoded mock data — visit `/bracket/mock`
 
 ---
 
