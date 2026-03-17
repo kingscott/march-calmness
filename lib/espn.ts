@@ -90,14 +90,17 @@ export async function fetchTournamentGames(dateStr: string): Promise<EspnEvent[]
 
 function parseRound(headline: string): Round | null {
   const h = headline.toLowerCase();
+  // Reject non-NCAA-tournament events (e.g. NIT) that also show up with groups=50
+  if (!h.startsWith("ncaa")) return null;
   // Check most specific patterns first
   if (h.includes("national championship") || h.includes("championship game")) return "championship";
   if (h.includes("final four") || h.includes("national semifinal")) return "final4";
   if (h.includes("elite eight") || h.includes("elite 8") || h.includes("regional final")) return "elite8";
   if (h.includes("sweet sixteen") || h.includes("sweet 16") || h.includes("regional semifinal")) return "sweet16";
-  if (h.includes("second round") || h.includes("round of 32")) return "round2";
-  // "First Round" and "First Four" both map to round1
-  if (h.includes("first round") || h.includes("first four") || h.includes("round of 64")) return "round1";
+  // Real API uses "2nd Round" (not "Second Round") — match both
+  if (h.includes("second round") || h.includes("2nd round") || h.includes("round of 32")) return "round2";
+  // Real API uses "1st Round" (not "First Round") — match both; "First Four" also maps here
+  if (h.includes("first round") || h.includes("1st round") || h.includes("first four") || h.includes("round of 64")) return "round1";
   return null;
 }
 
