@@ -1,0 +1,28 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "march-calmness",
+	"compatibility_date": "2026-03-15",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "./worker/index.ts",
+	"assets": {
+		"not_found_handling": "none"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "march-calmness",
+			"database_id": "5974aea4-3140-491e-960a-801d9563a878",
+			"migrations_dir": "./migrations"
+		}
+	],
+	// Cron Triggers for ESPN polling
+	// - Every 2 minutes during tournament hours
+	// - Hourly outside the tournament window (pollOnce skips if not in window)
+	"triggers": {
+		"crons": [
+			"*/2 * * * *"
+		]
+	}
+}
