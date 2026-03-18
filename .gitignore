@@ -49,3 +49,6 @@ next-env.d.ts
 .output/
 dist
 .wrangler
+
+# local claude code config (machine-specific)
+.claude/settings.local.json
