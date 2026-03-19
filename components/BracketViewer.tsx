@@ -346,18 +346,16 @@ function buildBracketryData(games: Game[]) {
         {
           contestantId: game.teamA,
           isWinner: game.status === "post" && game.winner === game.teamA,
-          scores:
-            game.scoreA !== null && game.scoreA !== undefined
-              ? [{ mainScore: game.scoreA }]
-              : [],
+          ...(game.scoreA !== null && game.scoreA !== undefined
+            ? { scores: [{ mainScore: game.scoreA }] }
+            : {}),
         },
         {
           contestantId: game.teamB,
           isWinner: game.status === "post" && game.winner === game.teamB,
-          scores:
-            game.scoreB !== null && game.scoreB !== undefined
-              ? [{ mainScore: game.scoreB }]
-              : [],
+          ...(game.scoreB !== null && game.scoreB !== undefined
+            ? { scores: [{ mainScore: game.scoreB }] }
+            : {}),
         },
       ],
     });
@@ -474,19 +472,19 @@ export default function BracketViewer({ picks, games }: BracketViewerProps) {
       bracketInstanceRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picks]);
+  }, [picks, hasGames]);
 
-  // Live score updates — patch options + matches without re-mounting
+  // Live score updates — patch matches without re-mounting.
+  // Note: getMatchTopHTML and getPlayerTitleHTML can't be updated via
+  // applyNewOptions (bracketry limitation); a full rebuild (above) is needed
+  // to reflect pick-status colour changes.
   useEffect(() => {
     if (!bracketInstanceRef.current || !hasGames) return;
-
-    const pickMap = buildPickStatusMap(picks, games);
-    bracketInstanceRef.current.applyNewOptions(buildOptions(pickMap));
 
     const updatedMatches = buildBracketryData(games).matches;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     bracketInstanceRef.current.applyMatchesUpdates(updatedMatches as any);
-  }, [games, picks, hasGames]);
+  }, [games, hasGames]);
 
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)]">
