@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { listGames } from "@/lib/db";
 
 /**
@@ -11,9 +11,9 @@ import { listGames } from "@/lib/db";
  * Query params:
  *   ?live=true  — return only in-progress games
  */
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   try {
-    const liveOnly = req.nextUrl.searchParams.get("live") === "true";
+    const liveOnly = new URL(req.url).searchParams.get("live") === "true";
     const games = await listGames(liveOnly);
     return NextResponse.json({ games });
   } catch (err) {
