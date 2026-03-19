@@ -3,14 +3,17 @@
  *
  * Purpose: catch drift if ESPN changes their undocumented scoreboard API.
  * These tests use fixture data modelled on real ESPN responses (verified
- * against a live API call on 2026-03-15) so that any structural change
- * will break a test here before it silently breaks the app.
+ * against live API calls on 2026-03-15 through 2026-03-23) so that any
+ * structural change will break a test here before it silently breaks the app.
  *
- * VERIFIED REAL API SHAPE (2026-03-15):
+ * VERIFIED REAL API SHAPE (2026-03-15 to 2026-03-23):
  *   - event.notes is absent / null in real responses
  *   - headline lives at competitions[0].notes[0].headline
- *   - team.seed is absent for pre-tournament TBD matchups (curatedRank used instead)
- *   - competition.type.abbreviation === "TRNMNT" for all tournament games
+ *   - team.seed is absent; seeds come from curatedRank.current
+ *   - competition.type.abbreviation === "TRNMNT" for all tournament games INCLUDING NIT
+ *   - Round strings use ordinal form: "1st Round", "2nd Round" (NOT "First Round"/"Second Round")
+ *   - Region strings use "X Region": "Midwest Region" (NOT "Midwest Regional")
+ *   - NIT games filtered by parseRound rejecting headlines that don't start with "NCAA"
  *
  * To refresh fixtures after a confirmed ESPN API change:
  *   1. Capture: curl "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=20260320&groups=50&limit=100"
@@ -69,7 +72,7 @@ function makeEvent(overrides: {
 } = {}) {
   const {
     id = "401638924",
-    headline = "NCAA Men's Basketball Championship - First Round - South Regional",
+    headline = "NCAA Men's Basketball Championship - South Region - 1st Round",
     state = "post",
     completed = true,
     scoreA = "78",
@@ -234,9 +237,16 @@ describe("parseGame — API shape drift", () => {
   });
 
   it("returns null when headline does not match any known round", () => {
-    // If ESPN renames rounds (e.g. "First Round" → "Opening Round") this
+    // If ESPN renames rounds (e.g. "1st Round" → "Opening Round") this
     // test will pass but the app will silently skip games — update parseRound.
     const event = makeEvent({ headline: "NCAA Tournament - Unknown Round - East Regional" });
+    expect(parseGame(event)).toBeNull();
+  });
+
+  it("rejects NIT games even though they have type.abbreviation === 'TRNMNT'", () => {
+    // groups=50 returns NIT games with the same TRNMNT abbreviation as NCAA tournament games.
+    // They must be filtered by parseRound rejecting headlines that don't start with "NCAA".
+    const event = makeEvent({ headline: "NIT - 1st Round", typeAbbr: "TRNMNT" });
     expect(parseGame(event)).toBeNull();
   });
 
@@ -255,22 +265,25 @@ describe("parseGame — API shape drift", () => {
 describe("round detection via ESPN headlines", () => {
   const cases: Array<[string, string, string]> = [
     // [headline, expectedRound, description]
-    // "First Four" uses the same "Championship" prefix as other rounds in real API
-    ["NCAA Men's Basketball Championship - First Four", "round1", "First Four"],
-    ["NCAA Men's Basketball Championship - First Round - East Regional", "round1", "First Round"],
-    ["NCAA Men's Basketball Tournament - Round of 64 - West Regional", "round1", "Round of 64"],
-    ["NCAA Men's Basketball Championship - Second Round - Midwest Regional", "round2", "Second Round"],
-    ["NCAA Men's Basketball Tournament - Round of 32 - South Regional", "round2", "Round of 32"],
-    ["NCAA Men's Basketball Championship - Sweet Sixteen - East Regional", "sweet16", "Sweet Sixteen"],
-    ["NCAA Men's Basketball Tournament - Sweet 16 - West Regional", "sweet16", "Sweet 16"],
-    ["NCAA Men's Basketball Tournament - Regional Semifinal - Midwest", "sweet16", "Regional Semifinal"],
-    ["NCAA Men's Basketball Championship - Elite Eight - South Regional", "elite8", "Elite Eight"],
-    ["NCAA Men's Basketball Tournament - Elite 8 - East Regional", "elite8", "Elite 8"],
-    ["NCAA Men's Basketball Tournament - Regional Final - West Regional", "elite8", "Regional Final"],
-    ["NCAA Men's Basketball Championship - Final Four - National Semifinals", "final4", "Final Four"],
-    ["NCAA Men's Basketball Tournament - National Semifinal", "final4", "National Semifinal"],
-    ["NCAA Men's Basketball Championship - National Championship", "championship", "National Championship"],
-    ["NCAA Men's Basketball Tournament - Championship Game", "championship", "Championship Game"],
+    // ── Real API strings (verified 2026-03-17 to 2026-03-23) ──────────────────
+    ["NCAA Men's Basketball Championship - Midwest Region - First Four", "round1", "Real: First Four"],
+    ["NCAA Men's Basketball Championship - Midwest Region - 1st Round",  "round1", "Real: 1st Round"],
+    ["NCAA Men's Basketball Championship - West Region - 2nd Round",     "round2", "Real: 2nd Round"],
+    ["NCAA Men's Basketball Championship - East Region - Sweet 16",      "sweet16", "Real: Sweet 16"],
+    ["NCAA Men's Basketball Championship - South Region - Elite 8",      "elite8", "Real: Elite 8"],
+    ["NCAA Men's Basketball Championship - National Championship",        "championship", "Real: National Championship"],
+    // ── Legacy / alternate strings (kept for robustness) ─────────────────────
+    ["NCAA Men's Basketball Championship - First Round - East Regional",  "round1", "Alt: First Round"],
+    ["NCAA Men's Basketball Tournament - Round of 64 - West Regional",   "round1", "Alt: Round of 64"],
+    ["NCAA Men's Basketball Championship - Second Round - Midwest Regional", "round2", "Alt: Second Round"],
+    ["NCAA Men's Basketball Tournament - Round of 32 - South Regional",  "round2", "Alt: Round of 32"],
+    ["NCAA Men's Basketball Championship - Sweet Sixteen - East Regional", "sweet16", "Alt: Sweet Sixteen"],
+    ["NCAA Men's Basketball Tournament - Regional Semifinal - Midwest",  "sweet16", "Alt: Regional Semifinal"],
+    ["NCAA Men's Basketball Championship - Elite Eight - South Regional", "elite8", "Alt: Elite Eight"],
+    ["NCAA Men's Basketball Tournament - Regional Final - West Regional", "elite8", "Alt: Regional Final"],
+    ["NCAA Men's Basketball Championship - Final Four - National Semifinals", "final4", "Alt: Final Four"],
+    ["NCAA Men's Basketball Tournament - National Semifinal",             "final4", "Alt: National Semifinal"],
+    ["NCAA Men's Basketball Tournament - Championship Game",              "championship", "Alt: Championship Game"],
   ];
 
   it.each(cases)('headline "%s" → round "%s" (%s)', (headline, expectedRound) => {
@@ -324,7 +337,7 @@ describe.skipIf(process.env.CI === "true")("fetchTournamentGames — live ESPN A
   it("returns events whose headline is on competition.notes, not event.notes", async () => {
     // This is the key shape assertion. If ESPN moves notes back to the event
     // level, this test will fail and alert us to update parseGame accordingly.
-    const dateStr = "20260317"; // First Four — known to have TRNMNT events
+    const dateStr = "20260320"; // 1st Round — known to have TRNMNT events (verified)
     const events = await fetchTournamentGames(dateStr);
 
     // Filter to only TRNMNT events
