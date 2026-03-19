@@ -118,21 +118,24 @@ function getRegionalStatus(
 }
 
 function getF4Status(games: Game[], team: string): PickStatus {
-  const f4Games = games.filter((g) => g.round === "final4");
-  if (f4Games.length === 0) {
-    // Check if E8 already eliminated this team
-    const lost = games.find(
+  const f4Game = games.find(
+    (g) => g.round === "final4" && (g.teamA === team || g.teamB === team),
+  );
+
+  if (!f4Game) {
+    // Team didn't make Final Four — check if E8 already ended their run
+    const e8Loss = games.find(
       (g) =>
         g.round === "elite8" &&
         (g.teamA === team || g.teamB === team) &&
         g.status === "post" &&
         g.winner !== team,
     );
-    return lost ? "eliminated" : "pending";
+    return e8Loss ? "eliminated" : "pending";
   }
-  return f4Games.some((g) => g.teamA === team || g.teamB === team)
-    ? "correct"
-    : "eliminated";
+
+  if (f4Game.status !== "post") return "pending";
+  return f4Game.winner === team ? "correct" : "eliminated";
 }
 
 function getChampStatus(games: Game[], team: string): PickStatus {
