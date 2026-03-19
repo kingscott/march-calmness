@@ -44,17 +44,48 @@ interface ScoreSummary {
   pending: number;
 }
 
+function normTeam(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[''ʻ']/g, "")
+    .replace(/\./g, "")
+    .replace(/\s*\([^)]*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findGameFuzzy(games: Game[], round: Round, region: Game["region"], team: string): Game | undefined {
+  const exact = games.find(
+    (g) => g.round === round && g.region === region && (g.teamA === team || g.teamB === team),
+  );
+  if (exact) return exact;
+  const tn = normTeam(team);
+  return games.find((g) => {
+    if (g.round !== round || g.region !== region) return false;
+    const an = normTeam(g.teamA);
+    const bn = normTeam(g.teamB);
+    return an.startsWith(tn) || bn.startsWith(tn) || tn.startsWith(an) || tn.startsWith(bn);
+  });
+}
+
+function gameTeamFor(game: Game, pickTeam: string): string {
+  if (game.teamA === pickTeam) return game.teamA;
+  if (game.teamB === pickTeam) return game.teamB;
+  const tn = normTeam(pickTeam);
+  const an = normTeam(game.teamA);
+  return (an.startsWith(tn) || tn.startsWith(an)) ? game.teamA : game.teamB;
+}
+
 function scorePicksAgainstGames(picks: BracketPicks, games: Game[]): ScoreSummary {
   if (games.length === 0) return { correct: 0, eliminated: 0, pending: 0 };
 
   let correct = 0, eliminated = 0, pending = 0;
 
   function check(team: string, round: Round, region: Game["region"]) {
-    const game = games.find(
-      (g) => g.round === round && g.region === region && (g.teamA === team || g.teamB === team),
-    );
+    const game = findGameFuzzy(games, round, region, team);
     if (!game || game.status !== "post") { pending++; return; }
-    if (game.winner === team) correct++;
+    const gt = gameTeamFor(game, team);
+    if (game.winner === gt) correct++;
     else eliminated++;
   }
 
@@ -240,7 +271,11 @@ function BracketPageInner() {
           Eliminated
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#e2c2a2]" />
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#e2c2a2] opacity-60" />
+          <span style={{ color: "#e2c2a2", fontWeight: 600, background: "rgba(226,194,162,0.15)", padding: "0 3px", borderRadius: "3px" }}>Live pick</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#e2c2a2] opacity-40" />
           Pending
         </span>
         <span className="flex items-center gap-1.5">
