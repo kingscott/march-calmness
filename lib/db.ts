@@ -54,6 +54,10 @@ export async function upsertGame(game: Omit<Game, "id">): Promise<void> {
                          score_a, score_b, status, winner, game_date, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT (espn_id) DO UPDATE SET
+        team_a     = excluded.team_a,
+        team_b     = excluded.team_b,
+        seed_a     = excluded.seed_a,
+        seed_b     = excluded.seed_b,
         score_a    = excluded.score_a,
         score_b    = excluded.score_b,
         status     = excluded.status,

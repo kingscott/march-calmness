@@ -243,6 +243,11 @@ describe("parseGame — API shape drift", () => {
     expect(parseGame(event)).toBeNull();
   });
 
+  it("returns null for First Four play-in games (excluded from bracket)", () => {
+    const event = makeEvent({ headline: "NCAA Men's Basketball Championship - South Region - First Four" });
+    expect(parseGame(event)).toBeNull();
+  });
+
   it("rejects NIT games even though they have type.abbreviation === 'TRNMNT'", () => {
     // groups=50 returns NIT games with the same TRNMNT abbreviation as NCAA tournament games.
     // They must be filtered by parseRound rejecting headlines that don't start with "NCAA".
@@ -266,7 +271,6 @@ describe("round detection via ESPN headlines", () => {
   const cases: Array<[string, string, string]> = [
     // [headline, expectedRound, description]
     // ── Real API strings (verified 2026-03-17 to 2026-03-23) ──────────────────
-    ["NCAA Men's Basketball Championship - Midwest Region - First Four", "round1", "Real: First Four"],
     ["NCAA Men's Basketball Championship - Midwest Region - 1st Round",  "round1", "Real: 1st Round"],
     ["NCAA Men's Basketball Championship - West Region - 2nd Round",     "round2", "Real: 2nd Round"],
     ["NCAA Men's Basketball Championship - East Region - Sweet 16",      "sweet16", "Real: Sweet 16"],
