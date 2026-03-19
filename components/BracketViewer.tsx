@@ -140,8 +140,12 @@ function getF4Status(games: Game[], team: string): PickStatus {
 
 function getChampStatus(games: Game[], team: string): PickStatus {
   const game = findGame(games, "championship", "Championship", team);
-  if (!game || game.status !== "post") return "pending";
-  return game.winner === team ? "correct" : "eliminated";
+  if (game?.status === "post") {
+    return game.winner === team ? "correct" : "eliminated";
+  }
+  // Championship game missing/pre/in — a team eliminated in the Final Four
+  // can never reach the championship, so propagate that result.
+  return getF4Status(games, team) === "eliminated" ? "eliminated" : "pending";
 }
 
 // ─── Bracketry data from picks (no game data needed) ─────────────────────────
