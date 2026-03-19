@@ -7,11 +7,11 @@ You want a self-hosted web app to: (1) upload a digitally-filled bracket PDF, (2
 ## Tech Stack
 
 - **Framework**: [vinext](https://github.com/cloudflare/vinext) (Vite-based Next.js reimplementation)
-- **Self-hosting**: Nitro `node` preset → standalone Node.js server, Dockerized
+- **Deployment**: Cloudflare Workers + D1 via `vinext deploy`
 - **Bracket visualization**: [Bracketry.js](https://bracketry.app/) (framework-agnostic, 12kb gzip, MIT, active maintenance)
 - **PDF parsing**: Claude API vision (convert PDF page to image, send to Claude to extract picks as structured JSON)
 - **Live scores**: ESPN undocumented API (free, no API key, returns JSON)
-- **Data storage**: SQLite via `better-sqlite3` (single file, zero config, perfect for single-user self-hosted app)
+- **Data storage**: Cloudflare D1 (SQLite at the edge — `wrangler.jsonc` + `migrations/`)
 
 ## Architecture
 
@@ -19,11 +19,11 @@ You want a self-hosted web app to: (1) upload a digitally-filled bracket PDF, (2
 ┌─────────────────────────────────────────────────┐
 │                   Browser                        │
 │  ┌───────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Upload PDF│  │ Bracket  │  │  Scoreboard  │  │
-│  │   Page    │  │  Viewer  │  │   + Status   │  │
+│  │ Upload PDF│  │ Bracket  │  │  Score bar   │  │
+│  │   Page    │  │  Viewer  │  │  (client)    │  │
 │  └─────┬─────┘  └────┬─────┘  └──────┬───────┘  │
 │        │              │               │          │
-│        │    polls every 2min          │          │
+│        │    polls every 30s           │          │
 └────────┼──────────────┼───────────────┼──────────┘
          │              │               │
     ┌────┴──────────────┴───────────────┴────┐
@@ -33,12 +33,11 @@ You want a self-hosted web app to: (1) upload a digitally-filled bracket PDF, (2
     │  GET  /api/bracket/:id                  │
     │  DELETE /api/bracket/:id                │
     │  GET  /api/scores                       │
-    │  GET  /api/bracket/:id/status           │
     └────┬──────────────┬───────────────┬────┘
          │              │               │
     ┌────┴────┐   ┌─────┴─────┐   ┌────┴────┐
-    │ Claude  │   │  SQLite   │   │  ESPN   │
-    │  API    │   │   DB      │   │  API    │
+    │ Claude  │   │Cloudflare │   │  ESPN   │
+    │  API    │   │    D1     │   │  API    │
     │ (parse) │   │ (storage) │   │(scores) │
     └─────────┘   └───────────┘   └─────────┘
 ```
@@ -53,34 +52,35 @@ march-calmness/
 │   ├── upload/
 │   │   └── page.tsx               # PDF upload page
 │   ├── bracket/
-│   │   └── page.tsx               # Bracket viewer with live scores
+│   │   ├── page.tsx               # Bracket viewer with live scores + score bar
+│   │   └── mock/page.tsx          # Mock data dev page
 │   └── api/
 │       ├── brackets/
 │       │   └── route.ts           # GET: list all brackets
 │       ├── bracket/
 │       │   ├── upload/route.ts    # POST: accept PDF + name, parse via Claude, store picks
 │       │   └── [id]/
-│       │       ├── route.ts       # GET: return bracket picks; DELETE: remove bracket
-│       │       └── status/route.ts # GET: bracket score/status summary
+│       │       └── route.ts       # GET: return bracket picks; DELETE: remove bracket
 │       └── scores/
-│           └── route.ts           # GET: fetch ESPN scores (with server-side cache)
+│           └── route.ts           # GET: fetch games from D1
 ├── lib/
-│   ├── db.ts                      # SQLite setup + queries
-│   ├── espn.ts                    # ESPN API client + caching
+│   ├── db.ts                      # D1 queries
+│   ├── espn.ts                    # ESPN API client + normalization
 │   ├── poller.ts                  # Background ESPN polling loop
 │   ├── bracket-parser.ts          # PDF→image→Claude API→structured JSON
-│   ├── bracket-scorer.ts          # Compare picks vs actual results → points
+│   ├── mock-data.ts               # Hardcoded mock bracket + games for dev
 │   └── types.ts                   # Shared TypeScript types
 ├── components/
 │   ├── BracketViewer.tsx          # Bracketry.js wrapper component
-│   ├── ScoreOverlay.tsx           # Live score indicators on bracket
 │   ├── UploadForm.tsx             # PDF drag-and-drop upload
-│   └── StatusBar.tsx              # Points summary / leaderboard position
-├── public/
-├── package.json
-├── vite.config.ts
-├── Dockerfile
-└── docker-compose.yml
+│   └── DeleteButton.tsx           # Client island for bracket deletion
+├── worker/
+│   └── index.ts                   # Cloudflare Worker entry point
+├── migrations/
+│   └── 0001_initial_schema.sql    # D1 schema (brackets + games tables)
+├── instrumentation.ts             # Starts ESPN poller on server init
+├── wrangler.jsonc                 # Cloudflare Workers config
+└── package.json
 ```
 
 ## Design: Calm Vibes (Zen Browser-inspired)
@@ -109,147 +109,131 @@ Minimal, spacious, and quiet — not the typical loud sports aesthetic.
 - Cards with subtle borders (`1px solid` at 10% opacity)
 - Generous padding: `1.5rem` on cards, `1rem` on smaller elements
 
-**Layout:**
-- Max-width container (`1200px`) centered with ample side margins
-- Minimal navigation — simple top bar with app name + 2-3 links
-- The bracket view is full-width for readability, with horizontal scroll on mobile
-- Upload page is centered with a large, inviting drop zone
-
 **Motion:**
 - Subtle fade-in on page transitions
 - Gentle pulse on live game scores (breathing animation, not flashing)
 - Smooth color transitions when pick status changes
 
-## Implementation Plan
+## Implementation Status
 
-### Phase 0: Scaffolding ✅
-
-**PR #0 — [PR #1](https://github.com/kingscott/march-calmness/pull/1) (draft)**
+### Phase 0: Scaffolding ✅ DONE
 
 - [x] Initialize Next.js 16 App Router project with pnpm
-- [x] Install all dependencies: `better-sqlite3`, `@anthropic-ai/sdk`, `bracketry`, `swr`, `pdf-to-img`
 - [x] Add `vinext` + `@vitejs/plugin-rsc` for Vite-based dev server
-- [x] Create `lib/types.ts` with all shared TypeScript types (bracket picks, game results, scoring)
-- [x] Create `lib/db.ts` with SQLite setup (WAL mode) and both table schemas
+- [x] Create `lib/types.ts` with all shared TypeScript types
+- [x] Create `lib/db.ts` with D1 query helpers
 - [x] Create `app/layout.tsx` with root layout, Inter font, top nav
 - [x] Create `app/globals.css` with full color palette, design tokens, component classes
-- [x] Stub out pages: `app/page.tsx`, `app/upload/page.tsx`, `app/bracket/page.tsx`
-- [x] `pnpm dev` launches successfully on port 3000
+- [x] `pnpm dev` launches successfully
 
 ---
 
-### Phase 1: Parallel PRs (all independent — can run as concurrent agents)
+### Phase 1: Core Features ✅ DONE
 
-**PR #1: ESPN client + background poller** `lib/espn.ts`, `lib/poller.ts`, `app/api/scores/route.ts`
+**ESPN client + background poller** — `lib/espn.ts`, `lib/poller.ts`, `app/api/scores/route.ts`
 
-- [ ] `lib/espn.ts`: ESPN API client
-  - Fetch `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=YYYYMMDD&groups=50&limit=100`
-  - Parse response: team names, scores, game status (pre/in/post), round from `notes[].headline`
-  - Filter tournament games via `competitions[].type.abbreviation === "TRNMNT"`
-- [ ] `lib/poller.ts`: Background polling loop (`setInterval` in server process)
-  - 2-minute interval during active game hours, 15-minute otherwise
-  - Upsert each game into `games` table; skip re-fetching games with `status = 'final'`
-  - Poll multiple days during the tournament window
-- [ ] `GET /api/scores`: reads from SQLite only. Supports `?live=true` filter.
+- [x] `lib/espn.ts`: ESPN scoreboard API client
+  - Fetches tournament games, normalizes round strings (`'1st Round'` → `'round1'` etc.)
+  - Filters out NIT games
+- [x] `lib/poller.ts`: Background polling loop via `setInterval` in `instrumentation.ts`
+  - Smart interval: 2 min during game hours, 15 min otherwise
+  - Upserts into D1 `games` table
+- [x] `GET /api/scores`: reads from D1
 
-**PR #2: PDF parser + Claude integration** `lib/bracket-parser.ts`, `app/api/bracket/upload/route.ts`
+**PDF parser + bracket CRUD** — `lib/bracket-parser.ts`, bracket API routes
 
-- [ ] `POST /api/bracket/upload`: accepts multipart form (PDF file + bracket name)
-- [ ] Convert PDF first page to PNG via `pdf-to-img`
-- [ ] Send to Claude API with structured extraction prompt:
-  ```
-  Extract all bracket picks... Return JSON: { regions: { "<name>": { round1: [...], round2: [...], sweet16: [...], elite8: "..." } }, final_four: [...], champion: "..." }
-  ```
-- [ ] Validate: every round N+1 pick must be one of two teams from the corresponding round N matchup
-- [ ] Store in `brackets` table
-- [ ] Also: `GET /api/brackets` (list all), `GET /api/bracket/[id]` (get one), `DELETE /api/bracket/[id]`
+- [x] `POST /api/bracket/upload`: multipart form (PDF + name) → pdf-to-img → Claude vision → structured JSON picks
+- [x] `GET /api/brackets`: list all brackets
+- [x] `GET /api/bracket/[id]`: get one bracket with picks
+- [x] `DELETE /api/bracket/[id]`: remove bracket
 
-**PR #3: Bracket visualization component** `components/BracketViewer.tsx`
+**BracketViewer component** — `components/BracketViewer.tsx`
 
 - [x] `"use client"` component wrapping Bracketry.js
-- [x] Single `useEffect` with cleanup for mounting/unmounting the Bracketry instance on a ref div
+- [x] Single `useEffect` with cleanup for mounting/unmounting
 - [x] Bracketry's `.applyMatchesUpdates()` for live updates without re-mount
-- [x] Accepts props: `picks` (user's bracket), `games` (actual results)
-- [x] Color-codes picks: sage green (correct), muted rose (eliminated), quiet gray (pending)
-- [x] Breathing animation on live game scores (via `getMatchTopHTML` Live indicator)
-- [x] Can be developed and tested with hardcoded mock data — visit `/bracket/mock`
+- [x] Color-codes picks: sage green (correct), muted rose (eliminated), sand (pending), gray (not picked)
+- [x] Live game indicator via `getMatchTopHTML`
+- [x] Dev mock page at `/bracket/mock`
 
 ---
 
-### Phase 2: Integration (depends on Phase 1 — can partially parallelize)
+### Phase 2: Upload UI + Scoring ✅ DONE
 
-**PR #4: Scoring engine** `lib/bracket-scorer.ts`, `app/api/bracket/[id]/status/route.ts`
-- *Depends on*: types from PR #0, game data format from PR #1, bracket data format from PR #2
-- [ ] Compare user picks against completed games
-- [ ] Scoring: 10 (R64), 20 (R32), 40 (S16), 80 (E8), 160 (F4), 320 (CHIP)
-- [ ] Returns: correct picks, wrong picks, pending, total points, max possible remaining
-- [ ] `GET /api/bracket/:id/status` endpoint
+**Upload page** — `app/upload/page.tsx`, `components/UploadForm.tsx`
 
-**PR #5: Upload page UI** `app/upload/page.tsx`, `components/UploadForm.tsx`
-- *Depends on*: PR #2 (upload API), PR #3 (bracket viewer for preview)
-- [ ] Drag-and-drop PDF upload with name field
-- [ ] Progress states: uploading → parsing → validating → done
-- [ ] After parsing, renders `BracketViewer` with extracted picks for user review before saving
-- [ ] "Save" button to confirm, or "Try Again" to re-upload
+- [x] Drag-and-drop PDF upload with name field
+- [x] Progress states: uploading → parsing → done
+- [x] After parsing, renders `BracketViewer` with extracted picks for review
 
-**PR #5 and #4 can run in parallel** — they depend on different Phase 1 PRs.
+**Scoring** — inlined in `app/bracket/page.tsx`
 
----
+- [x] `scorePicksAgainstGames()` runs client-side
+- [x] Shows correct / out / pending counts + animated progress bar
+- [x] Live game count indicator with `live-pulse` animation
+- [x] SWR polling every 30s
 
-### Phase 3: Assembly (depends on Phase 2)
-
-**PR #6: Dashboard + bracket switcher** `app/page.tsx`, `app/bracket/page.tsx`, `components/StatusBar.tsx`
-- *Depends on*: PR #3 (viewer), PR #4 (scoring), PR #5 (upload exists)
-- [ ] Home page: bracket switcher (dropdown/tabs), per-bracket score summary cards, comparison view across all brackets
-- [ ] Bracket page: full bracket viewer with SWR polling (`refreshInterval: 30000`) for live scores
-- [ ] Today's games list with your pick for the selected bracket
-- [ ] Delete bracket button
-
-**PR #7: Design polish pass**
-- *Can run in parallel with PR #6 or after*
-- [ ] Apply calm vibes design system across all pages
-- [ ] Dark/light mode toggle with `prefers-color-scheme` detection
-- [ ] Subtle fade-in page transitions
-- [ ] Breathing animation on live scores
-- [ ] Responsive layout: horizontal scroll bracket on mobile
-- [ ] Final CSS pass for consistent spacing, shadows, rounded corners
+> `lib/bracket-scorer.ts` and `/api/bracket/:id/status` from the original plan were
+> not built. Scoring is computed client-side instead, which is simpler for a single-user app.
 
 ---
 
-### Phase 4: Deployment
+### Phase 3: Dashboard + Assembly ✅ DONE
 
-**PR #8: Docker setup** `Dockerfile`, `docker-compose.yml`
-- *Can start anytime after PR #0, finalize after PR #7*
-- [ ] Multi-stage Dockerfile: build with `NITRO_PRESET=node`, run `node .output/server/index.mjs`
-- [ ] `docker-compose.yml` with volume for SQLite persistence
-- [ ] `ANTHROPIC_API_KEY` environment variable
+**Dashboard** — `app/page.tsx`
+
+- [x] Lists all brackets with name, upload date, View/Delete actions
+- [x] Empty state with upload CTA
+- [x] `components/DeleteButton.tsx` client island
+
+**Bracket page** — `app/bracket/page.tsx`
+
+- [x] Full bracket viewer with SWR polling every 30s
+- [x] Score bar (correct/out/pending + progress bar) shown once games are available
+- [x] Live game count indicator, pick legend, back-to-dashboard link
 
 ---
 
-### Dependency Graph
+### Phase 4: Deployment ✅ DONE (Cloudflare)
+
+- [x] `wrangler.jsonc` with D1 binding and worker entry
+- [x] `migrations/0001_initial_schema.sql` for D1 schema
+- [x] `instrumentation.ts` starts ESPN poller on server init
+- [x] `pnpm deploy` → `vinext deploy` → Cloudflare Workers
+
+> Original Docker/Nitro self-hosting plan is obsolete. Cloudflare Workers + D1 is the deployment target.
+
+---
+
+### Remaining / Nice-to-have
+
+- **Dashboard score cards**: Show per-bracket correct/out/pending summary on dashboard cards without navigating to the bracket page (requires client-side SWR on dashboard or a `/api/bracket/:id/status` endpoint)
+- **Design polish**: Page-enter fade animations, responsive bracket horizontal scroll on mobile
+- **Test coverage**: `lib/__tests__/espn.test.ts` exists; add coverage for bracket-parser and scoring logic
+
+---
+
+### Dependency Graph (as-built)
 
 ```
-PR #0 (scaffolding) ✅
-  ├── PR #1 (ESPN poller)      ─┐
-  ├── PR #2 (PDF parser)       ─┼── all parallel
-  └── PR #3 (bracket viewer)   ─┘
-        │         │        │
-        │    PR #4 (scoring)    PR #5 (upload UI)  ── partial parallel
-        │         │                    │
-        └─────────┴────────────────────┘
-                       │
-                  PR #6 (dashboard)
-                  PR #7 (design polish)  ── can parallel with #6
-                       │
-                  PR #8 (docker)
+Phase 0 (scaffolding) ✅
+  ├── Phase 1a: ESPN poller      ✅
+  ├── Phase 1b: PDF parser       ✅
+  └── Phase 1c: BracketViewer    ✅
+        │            │
+  Phase 2a: Upload UI ✅   Phase 2b: Scoring (client-side) ✅
+        │            │
+        └────────────┴──── Phase 3: Dashboard + Bracket page ✅
+                                       │
+                                 Cloudflare deploy ✅
 ```
 
 ## Verification
 
 - [x] `vinext dev` starts the dev server successfully
-- [ ] Upload a sample bracket PDF → Claude parses it → picks appear in bracket viewer
-- [ ] Bracket viewer renders all 63 games with correct matchup structure
-- [ ] `/api/scores` returns current ESPN tournament data
-- [ ] Bracket viewer color-codes picks based on actual results
-- [ ] `docker compose up` runs the self-hosted app successfully
-- [ ] Scores auto-refresh every 2 minutes in the browser
+- [x] Upload a bracket PDF → Claude parses it → picks appear in bracket viewer
+- [x] Bracket viewer renders all 63 games with correct matchup structure
+- [x] `/api/scores` returns current ESPN tournament data
+- [x] Bracket viewer color-codes picks based on actual results
+- [x] Scores auto-refresh every 30s in the browser
+- [ ] `pnpm deploy` deploys to Cloudflare Workers successfully
