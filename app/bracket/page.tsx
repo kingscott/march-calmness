@@ -50,8 +50,40 @@ function normTeam(name: string): string {
     .replace(/[''ʻ']/g, "")
     .replace(/\./g, "")
     .replace(/\s*\([^)]*\)/g, "")
+    .replace(/\bsaint\b/g, "st")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Standard NCAA bracket print abbreviations → matchable name fragment.
+// Keys must already be in normTeam form (no dots, no apostrophes, saint→st).
+const BRACKET_ALIASES: Record<string, string> = {
+  "michst":       "michigan state",
+  "mich st":      "michigan state",
+  "kensaw":       "kennesaw state",
+  "maryca":       "st marys",
+  "st marys ca":  "st marys",
+  "n carolina":   "north carolina",
+  "s carolina":   "south carolina",
+  "ndst":         "north dakota state",
+  "n dakota st":  "north dakota state",
+  "liu":          "long island university",
+  "pvamu":        "prairie view",
+  "pview":        "prairie view",
+  "pr view":      "prairie view",
+  "tenn st":      "tennessee state",
+  "wr st":        "wright state",
+  "wrst":         "wright state",
+};
+
+function expandAlias(normalized: string): string {
+  return BRACKET_ALIASES[normalized] ?? normalized;
+}
+
+function fuzzyMatch(pickNorm: string, espnNorm: string): boolean {
+  const tn = expandAlias(pickNorm);
+  const an = expandAlias(espnNorm);
+  return an.startsWith(tn) || tn.startsWith(an);
 }
 
 function findGameFuzzy(games: Game[], round: Round, region: Game["region"], team: string): Game | undefined {
@@ -64,7 +96,7 @@ function findGameFuzzy(games: Game[], round: Round, region: Game["region"], team
     if (g.round !== round || g.region !== region) return false;
     const an = normTeam(g.teamA);
     const bn = normTeam(g.teamB);
-    return an.startsWith(tn) || bn.startsWith(tn) || tn.startsWith(an) || tn.startsWith(bn);
+    return fuzzyMatch(tn, an) || fuzzyMatch(tn, bn);
   });
 }
 
@@ -73,8 +105,10 @@ function gameTeamFor(game: Game, pickTeam: string): string {
   if (game.teamB === pickTeam) return game.teamB;
   const tn = normTeam(pickTeam);
   const an = normTeam(game.teamA);
-  return (an.startsWith(tn) || tn.startsWith(an)) ? game.teamA : game.teamB;
+  return fuzzyMatch(tn, an) ? game.teamA : game.teamB;
 }
+
+const ROUND_ORDER: Round[] = ["round1", "round2", "sweet16", "elite8", "final4", "championship"];
 
 function scorePicksAgainstGames(picks: BracketPicks, games: Game[]): ScoreSummary {
   if (games.length === 0) return { correct: 0, eliminated: 0, pending: 0 };
@@ -83,7 +117,35 @@ function scorePicksAgainstGames(picks: BracketPicks, games: Game[]): ScoreSummar
 
   function check(team: string, round: Round, region: Game["region"]) {
     const game = findGameFuzzy(games, round, region, team);
-    if (!game || game.status !== "post") { pending++; return; }
+    if (!game || game.status !== "post") {
+      if (!game) {
+        // Play-in loser: round1 games exist for this region but team has no round1 game
+        if (
+          round === "round1" &&
+          games.some((g) => g.round === "round1" && g.region === region)
+        ) {
+          eliminated++;
+          return;
+        }
+        // Cascade: team was already eliminated in a prior round
+        const roundIdx = ROUND_ORDER.indexOf(round);
+        for (let i = roundIdx - 1; i >= 0; i--) {
+          const prevRound = ROUND_ORDER[i];
+          const prevRegion: Game["region"] =
+            prevRound === "final4" ? "Final Four" :
+            prevRound === "championship" ? "Championship" :
+            region;
+          const prevGame = findGameFuzzy(games, prevRound, prevRegion, team);
+          if (prevGame && prevGame.status === "post") {
+            const gt = gameTeamFor(prevGame, team);
+            if (prevGame.winner !== gt) { eliminated++; return; }
+            break; // won that round, current round just hasn't been played yet
+          }
+        }
+      }
+      pending++;
+      return;
+    }
     const gt = gameTeamFor(game, team);
     if (game.winner === gt) correct++;
     else eliminated++;

@@ -19,7 +19,9 @@ Extract all bracket picks and return them as a single JSON object with this exac
 }
 
 Rules:
-- Use the exact team name as printed on the bracket (e.g. "Duke", "UConn", "Kansas").
+- Use the common team name WITHOUT mascot nickname (e.g. "Duke", "UConn", "Kansas", "Michigan State", "North Carolina").
+- Expand any printed bracket abbreviations to full team names (e.g. "MICHST" → "Michigan State", "MARYCA" → "Saint Mary's", "KENSAW" → "Kennesaw State", "N. CAROLINA" → "North Carolina").
+- For teams from California/region-disambiguated schools, use the common name only (e.g. "Saint Mary's", not "St. Mary's CA").
 - round1 has 8 winners (Round of 64 → Round of 32 survivors).
 - round2 has 4 winners (Round of 32 → Sweet 16 survivors).
 - sweet16 has 2 winners (Sweet 16 → Elite 8 survivors).
