@@ -10,7 +10,7 @@ interface BracketViewerProps {
   games: Game[];
 }
 
-type PickStatus = "correct" | "eliminated" | "pending";
+type PickStatus = "correct" | "eliminated" | "pending" | "live-pick";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -60,6 +60,65 @@ const SEED_QUADRANT: Record<number, number> = {
 };
 
 // ─── Pick status helpers ──────────────────────────────────────────────────────
+//
+// Picks (from PDF) use short team names like "High Point" while ESPN stores
+// full names like "High Point Panthers". We normalize both sides for matching
+// and store statuses under the game team name so bracketry lookups succeed.
+
+function normTeam(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[''ʻ']/g, "")      // apostrophes, okina
+    .replace(/\./g, "")            // periods
+    .replace(/\s*\([^)]*\)/g, "") // parentheticals e.g. "(FL)"
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Exact-then-fuzzy game lookup by pick team name. */
+function findGame(
+  games: Game[],
+  round: Round,
+  region: Game["region"],
+  team: string,
+): Game | undefined {
+  const exact = games.find(
+    (g) =>
+      g.round === round &&
+      g.region === region &&
+      (g.teamA === team || g.teamB === team),
+  );
+  if (exact) return exact;
+
+  const tn = normTeam(team);
+  return games.find((g) => {
+    if (g.round !== round || g.region !== region) return false;
+    const an = normTeam(g.teamA);
+    const bn = normTeam(g.teamB);
+    // One name must be a prefix of the other (handles "High Point" ↔ "High Point Panthers",
+    // "Iowa St" ↔ "Iowa State Cyclones", "Michigan St" ↔ "Michigan State Spartans", etc.)
+    return (
+      an.startsWith(tn) || bn.startsWith(tn) ||
+      tn.startsWith(an) || tn.startsWith(bn)
+    );
+  });
+}
+
+/** Given a game found via fuzzy match, return the game's team name for the pick. */
+function gameTeamFor(game: Game, pickTeam: string): string {
+  if (game.teamA === pickTeam) return game.teamA;
+  if (game.teamB === pickTeam) return game.teamB;
+  const tn = normTeam(pickTeam);
+  const an = normTeam(game.teamA);
+  return (an.startsWith(tn) || tn.startsWith(an)) ? game.teamA : game.teamB;
+}
+
+function pickStatusFromGame(game: Game, pickTeam: string): PickStatus {
+  if (game.status === "in") return "live-pick";
+  if (game.status !== "post") return "pending";
+  const gameTeam = gameTeamFor(game, pickTeam);
+  return game.winner === gameTeam ? "correct" : "eliminated";
+}
 
 function buildPickStatusMap(
   picks: BracketPicks,
@@ -68,84 +127,76 @@ function buildPickStatusMap(
   const map = new Map<string, PickStatus>();
   const REGIONS: Region[] = ["East", "West", "South", "Midwest"];
 
+  function register(pickTeam: string, round: Round, region: Game["region"]) {
+    const game = findGame(games, round, region, pickTeam);
+    const status = game ? pickStatusFromGame(game, pickTeam) : "pending";
+
+    // Store under pick team name (for picks-only skeleton matches)
+    map.set(`${pickTeam}:${round}`, status);
+
+    // Also store under game team name — bracketry renders game team names
+    // and player title lookups must find the status there too
+    if (game) {
+      const gt = gameTeamFor(game, pickTeam);
+      if (gt !== pickTeam) map.set(`${gt}:${round}`, status);
+    }
+  }
+
   for (const region of REGIONS) {
     const rp = picks.regions[region];
-
-    for (const round of ["round1", "round2", "sweet16"] as const) {
-      for (const team of rp[round]) {
-        map.set(`${team}:${round}`, getRegionalStatus(games, round, region, team));
-      }
-    }
-
-    map.set(
-      `${rp.elite8}:elite8`,
-      getRegionalStatus(games, "elite8", region, rp.elite8),
-    );
+    for (const team of rp.round1) register(team, "round1", region);
+    for (const team of rp.round2) register(team, "round2", region);
+    for (const team of rp.sweet16) register(team, "sweet16", region);
+    register(rp.elite8, "elite8", region);
   }
 
   for (const team of picks.final4) {
-    map.set(`${team}:final4`, getF4Status(games, team));
+    const f4Game = findGame(games, "final4", "Final Four", team);
+    let status: PickStatus = "pending";
+    if (!f4Game) {
+      // Team didn't make Final Four — check if E8 already ended their run
+      const e8Loss = games.find(
+        (g) =>
+          g.round === "elite8" &&
+          (g.teamA === team || g.teamB === team ||
+           normTeam(g.teamA).startsWith(normTeam(team)) ||
+           normTeam(g.teamB).startsWith(normTeam(team)) ||
+           normTeam(team).startsWith(normTeam(g.teamA)) ||
+           normTeam(team).startsWith(normTeam(g.teamB))) &&
+          g.status === "post" &&
+          g.winner !== gameTeamFor(g, team),
+      );
+      status = e8Loss ? "eliminated" : "pending";
+    } else {
+      status = pickStatusFromGame(f4Game, team);
+    }
+    map.set(`${team}:final4`, status);
+    if (f4Game) {
+      const gt = gameTeamFor(f4Game, team);
+      if (gt !== team) map.set(`${gt}:final4`, status);
+    }
   }
 
-  map.set(`${picks.champion}:championship`, getChampStatus(games, picks.champion));
+  const champTeam = picks.champion;
+  const champGame = findGame(games, "championship", "Championship", champTeam);
+  let champStatus: PickStatus = "pending";
+  if (champGame) {
+    champStatus = pickStatusFromGame(champGame, champTeam);
+  } else {
+    // Propagate F4 elimination
+    const f4Game = findGame(games, "final4", "Final Four", champTeam);
+    if (f4Game?.status === "post") {
+      const gt = gameTeamFor(f4Game, champTeam);
+      if (f4Game.winner !== gt) champStatus = "eliminated";
+    }
+  }
+  map.set(`${champTeam}:championship`, champStatus);
+  if (champGame) {
+    const gt = gameTeamFor(champGame, champTeam);
+    if (gt !== champTeam) map.set(`${gt}:championship`, champStatus);
+  }
 
   return map;
-}
-
-function findGame(
-  games: Game[],
-  round: Round,
-  region: Game["region"],
-  team: string,
-): Game | undefined {
-  return games.find(
-    (g) =>
-      g.round === round &&
-      g.region === region &&
-      (g.teamA === team || g.teamB === team),
-  );
-}
-
-function getRegionalStatus(
-  games: Game[],
-  round: Round,
-  region: Region,
-  team: string,
-): PickStatus {
-  const game = findGame(games, round, region, team);
-  if (!game || game.status !== "post") return "pending";
-  return game.winner === team ? "correct" : "eliminated";
-}
-
-function getF4Status(games: Game[], team: string): PickStatus {
-  const f4Game = games.find(
-    (g) => g.round === "final4" && (g.teamA === team || g.teamB === team),
-  );
-
-  if (!f4Game) {
-    // Team didn't make Final Four — check if E8 already ended their run
-    const e8Loss = games.find(
-      (g) =>
-        g.round === "elite8" &&
-        (g.teamA === team || g.teamB === team) &&
-        g.status === "post" &&
-        g.winner !== team,
-    );
-    return e8Loss ? "eliminated" : "pending";
-  }
-
-  if (f4Game.status !== "post") return "pending";
-  return f4Game.winner === team ? "correct" : "eliminated";
-}
-
-function getChampStatus(games: Game[], team: string): PickStatus {
-  const game = findGame(games, "championship", "Championship", team);
-  if (game?.status === "post") {
-    return game.winner === team ? "correct" : "eliminated";
-  }
-  // Championship game missing/pre/in — a team eliminated in the Final Four
-  // can never reach the championship, so propagate that result.
-  return getF4Status(games, team) === "eliminated" ? "eliminated" : "pending";
 }
 
 // ─── Bracketry data from picks (no game data needed) ─────────────────────────
@@ -364,6 +415,35 @@ function buildBracketryData(games: Game[]) {
   return { rounds, contestants, matches };
 }
 
+// ─── Merge game data with picks-based projections for future rounds ───────────
+//
+// When games are available, real game data is used for rounds that have ESPN
+// data. For rounds with no game data yet (future rounds), picks-based
+// projections fill in the gaps so the full bracket is always visible.
+
+function buildMergedData(picks: BracketPicks, games: Game[]) {
+  if (games.length === 0) return buildBracketryDataFromPicks(picks);
+
+  const gameData = buildBracketryData(games);
+  const picksData = buildBracketryDataFromPicks(picks);
+
+  const gameMatchPositions = new Set(
+    (gameData.matches as Array<{ roundIndex: number; order: number }>).map(
+      (m) => `${m.roundIndex}:${m.order}`,
+    ),
+  );
+
+  const picksOnlyMatches = (
+    picksData.matches as Array<{ roundIndex: number; order: number }>
+  ).filter((m) => !gameMatchPositions.has(`${m.roundIndex}:${m.order}`));
+
+  return {
+    rounds: picksData.rounds,
+    contestants: { ...picksData.contestants, ...gameData.contestants },
+    matches: [...gameData.matches, ...picksOnlyMatches],
+  };
+}
+
 // ─── Bracketry options builder ────────────────────────────────────────────────
 
 function makePlayerTitleHTML(
@@ -381,6 +461,8 @@ function makePlayerTitleHTML(
     return `<span style="color:#7eb89a;font-weight:600">${title}</span>`;
   if (status === "eliminated")
     return `<span style="color:#c47a7a;text-decoration:line-through">${title}</span>`;
+  if (status === "live-pick")
+    return `<span style="color:#e2c2a2;font-weight:600;background:rgba(226,194,162,0.15);padding:0 3px;border-radius:3px">${title}</span>`;
   if (status === "pending")
     return `<span style="color:#e2c2a2">${title}</span>`;
 
@@ -439,14 +521,13 @@ export default function BracketViewer({ picks, games }: BracketViewerProps) {
   const bracketInstanceRef = useRef<any>(null);
   const hasGames = games.length > 0;
 
-  // Mount / full rebuild whenever picks change (or on first render)
+  // Mount / full rebuild whenever picks or games change.
+  // buildMergedData combines real game data (where ESPN has it) with
+  // picks-based projections for future rounds, so the full bracket is always visible.
   useEffect(() => {
     if (!wrapperRef.current) return;
 
-    // Use real game data when available; fall back to picks-only reconstruction
-    const data = hasGames
-      ? buildBracketryData(games)
-      : buildBracketryDataFromPicks(picks);
+    const data = buildMergedData(picks, games);
     const pickMap = hasGames
       ? buildPickStatusMap(picks, games)
       : new Map<string, PickStatus>();
@@ -472,19 +553,7 @@ export default function BracketViewer({ picks, games }: BracketViewerProps) {
       bracketInstanceRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picks, hasGames]);
-
-  // Live score updates — patch matches without re-mounting.
-  // Note: getMatchTopHTML and getPlayerTitleHTML can't be updated via
-  // applyNewOptions (bracketry limitation); a full rebuild (above) is needed
-  // to reflect pick-status colour changes.
-  useEffect(() => {
-    if (!bracketInstanceRef.current || !hasGames) return;
-
-    const updatedMatches = buildBracketryData(games).matches;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    bracketInstanceRef.current.applyMatchesUpdates(updatedMatches as any);
-  }, [games, hasGames]);
+  }, [picks, games]);
 
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)]">
