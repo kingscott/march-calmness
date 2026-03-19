@@ -99,8 +99,10 @@ function parseRound(headline: string): Round | null {
   if (h.includes("sweet sixteen") || h.includes("sweet 16") || h.includes("regional semifinal")) return "sweet16";
   // Real API uses "2nd Round" (not "Second Round") — match both
   if (h.includes("second round") || h.includes("2nd round") || h.includes("round of 32")) return "round2";
-  // Real API uses "1st Round" (not "First Round") — match both; "First Four" also maps here
-  if (h.includes("first round") || h.includes("1st round") || h.includes("first four") || h.includes("round of 64")) return "round1";
+  // First Four = play-in games; exclude them from the bracket entirely
+  if (h.includes("first four")) return null;
+  // Real API uses "1st Round" (not "First Round") — match both
+  if (h.includes("first round") || h.includes("1st round") || h.includes("round of 64")) return "round1";
   return null;
 }
 
