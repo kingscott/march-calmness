@@ -42,6 +42,8 @@ interface ScoreSummary {
   correct: number;
   eliminated: number;
   pending: number;
+  gamesCorrect: number;
+  gamesDecided: number;
 }
 
 function normTeam(name: string): string {
@@ -111,22 +113,16 @@ function gameTeamFor(game: Game, pickTeam: string): string {
 const ROUND_ORDER: Round[] = ["round1", "round2", "sweet16", "elite8", "final4", "championship"];
 
 function scorePicksAgainstGames(picks: BracketPicks, games: Game[]): ScoreSummary {
-  if (games.length === 0) return { correct: 0, eliminated: 0, pending: 0 };
+  if (games.length === 0) return { correct: 0, eliminated: 0, pending: 0, gamesCorrect: 0, gamesDecided: 0 };
 
   let correct = 0, eliminated = 0, pending = 0;
+  const decidedGameIds = new Set<string>();
+  const correctGameIds = new Set<string>();
 
   function check(team: string, round: Round, region: Game["region"]) {
     const game = findGameFuzzy(games, round, region, team);
     if (!game || game.status !== "post") {
       if (!game) {
-        // Play-in loser: round1 games exist for this region but team has no round1 game
-        if (
-          round === "round1" &&
-          games.some((g) => g.round === "round1" && g.region === region)
-        ) {
-          eliminated++;
-          return;
-        }
         // Cascade: team was already eliminated in a prior round
         const roundIdx = ROUND_ORDER.indexOf(round);
         for (let i = roundIdx - 1; i >= 0; i--) {
@@ -147,7 +143,8 @@ function scorePicksAgainstGames(picks: BracketPicks, games: Game[]): ScoreSummar
       return;
     }
     const gt = gameTeamFor(game, team);
-    if (game.winner === gt) correct++;
+    decidedGameIds.add(game.espnId);
+    if (game.winner === gt) { correct++; correctGameIds.add(game.espnId); }
     else eliminated++;
   }
 
@@ -162,7 +159,7 @@ function scorePicksAgainstGames(picks: BracketPicks, games: Game[]): ScoreSummar
   for (const t of picks.final4) check(t, "final4", "Final Four");
   check(picks.champion, "championship", "Championship");
 
-  return { correct, eliminated, pending };
+  return { correct, eliminated, pending, gamesCorrect: correctGameIds.size, gamesDecided: decidedGameIds.size };
 }
 
 // ─── Inner page (uses useSearchParams — must be inside Suspense) ──────────────
@@ -298,6 +295,12 @@ function BracketPageInner() {
               <span className="text-[var(--text-primary)] font-medium">{score.pending}</span>
               <span className="text-[var(--text-secondary)]">pending</span>
             </span>
+            {score.gamesDecided > 0 && (
+              <span className="flex items-center gap-1.5 pl-2 border-l border-[var(--border)]">
+                <span className="text-[var(--text-primary)] font-medium">{score.gamesCorrect}/{score.gamesDecided}</span>
+                <span className="text-[var(--text-secondary)]">matchups</span>
+              </span>
+            )}
           </div>
           {total > 0 && (
             <>
@@ -314,7 +317,7 @@ function BracketPageInner() {
                   />
                 </div>
                 <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  {score.correct} of {total} picks decided
+                  {score.correct + score.eliminated} of {total} picks decided
                 </p>
               </div>
             </>
